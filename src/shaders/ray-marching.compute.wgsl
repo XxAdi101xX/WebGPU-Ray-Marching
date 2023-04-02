@@ -38,7 +38,7 @@ struct Ray {
     padding2: f32
 }
 
-const epsilon: f32 = 0.01;
+const epsilon: f32 = 0.001;
 const max_distance: f32 = 9999.0;
 const max_steps: u32 = 32;
 
@@ -64,11 +64,22 @@ fn ray_march(ray: ptr<function,Ray>) -> vec3<f32> {
     var total_distance_marched: f32 = 0.0;
 
     for (var step: u32 = 0; step < max_steps; step++) {
+        let marched_position: vec3<f32> = (*ray).origin + (*ray).direction * total_distance_marched;
         var i: i32 = 0;
-        var distance_marched: f32 = closest_distance_in_scene((*ray).origin + (*ray).direction * total_distance_marched, (*ray).direction, &i);
+        var distance_marched: f32 = closest_distance_in_scene(marched_position, (*ray).direction, &i);
         
         if (distance_marched < epsilon) {
-            color = objects.spheres[i].color;
+            const enable_lighting: bool = true;
+            if (enable_lighting) {
+                const intensity_multiplier: f32 = 1.4;
+                let normal = calculate_normal(marched_position, (*ray).direction, &i);
+                let light_position = vec3(2.0, -5.0, 3.0);
+                let direction_to_light = normalize(marched_position - light_position);
+                let diffuse_intensity = max(0.0, dot(normal, direction_to_light)) * intensity_multiplier;
+                color = objects.spheres[i].color * diffuse_intensity;
+            } else {
+                color = objects.spheres[i].color;
+            }
             break; 
         }
         
@@ -92,7 +103,9 @@ fn closest_distance_in_scene(
         var distance: f32 = signed_dst_to_sphere(marched_position, ray_direction, i);
         
         if (distance < closest_distance) {
-            closest_distance = distance;
+            // Noise to distort the sphere: https://michaelwalczyk.com/blog-ray-marching.html
+            let displacement: f32 = sin(5.0 * marched_position.x) * sin(5.0 * marched_position.y) * sin(5.0 * marched_position.z) * 0.25;
+            closest_distance = distance + displacement;
             *closest_sphere_index = i;
         }
     }
@@ -105,7 +118,7 @@ fn calculate_normal(
     ray_direction: vec3<f32>, 
     closest_sphere_index: ptr<function,i32>
 ) -> vec3<f32> {
-    const small_step: vec3<f32> = vec3(0.001, 0.0, 0.0);
+    const small_step: vec3<f32> = vec3(epsilon, 0.0, 0.0);
 
     let gradient_x: f32 = closest_distance_in_scene(marched_position + small_step.xyy, ray_direction, closest_sphere_index) - closest_distance_in_scene(marched_position - small_step.xyy, ray_direction, closest_sphere_index);
     let gradient_y: f32 = closest_distance_in_scene(marched_position + small_step.yxy, ray_direction, closest_sphere_index) - closest_distance_in_scene(marched_position - small_step.yxy, ray_direction, closest_sphere_index);
@@ -129,4 +142,41 @@ fn signed_dst_to_sphere(
     }
     
     return length(ray_to_sphere) - objects.spheres[sphere_index].radius;
+}
+
+// TODO: currently not tested or used
+// Mandelbulb distance estimation: http://blog.hvidtfeldts.net/index.php/2011/09/distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
+fn signed_dst_mandelbulb(marched_position: vec3<f32>) -> f32 {
+    const power: f32 = 10.0; // This is configurable
+
+    var z: vec3<f32> = marched_position;
+	var r: f32 = 0.0;
+	var dr: f32 = 1.0;
+    var iterations: i32 = 0;
+
+	for (var i = 0; i < 15 ; i++) {
+        iterations = i;
+		r = length(z);
+
+		if (r>2) {
+            break;
+        }
+        
+		// convert to polar coordinates
+		var theta: f32 = acos(z.z/r);
+		var phi: f32 = atan2(z.y,z.x);
+		dr = pow(r, power - 1.0) * power * dr + 1.0;
+
+		// scale and rotate the point
+		var zr: f32 = pow(r, power);
+		theta = theta * power;
+		phi = phi * power;
+		
+		// convert back to cartesian coordinates
+		z = zr * vec3<f32>(sin(theta) * cos(phi), sin(phi)*sin(theta), cos(theta));
+		z += marched_position;
+	}
+    var dst: f32 = 0.5 * log(r) * r / dr;
+    return dst;
+	//return vec2<f32>(iterations, dst * 1);
 }

@@ -8,7 +8,7 @@ export class Scene {
     camera: Camera;
 
     constructor() {
-        this.sphereData = new Array(20);
+        this.sphereData = new Array(10);
         for (let i = 0; i < this.sphereData.length; ++i) {
             const center: vec3 = [
                 3.0 + 7.0 * Math.random(),
