@@ -2,9 +2,9 @@
 var color_buffer: texture_storage_2d<rgba8unorm, write>;
 
 @group(0) @binding(1)
-var<uniform> scene: SceneData;
+var<uniform> application_data: ApplicationData;
 
-@group(0) @binding(2)
+@group(1) @binding(0)
 var<storage, read> objects: ObjectData;
 
 // CPU/GPU structs
@@ -12,13 +12,13 @@ struct Sphere {
     center: vec3<f32>,
     radius: f32,
     color: vec3<f32>,
-    padding: f32 // padding to 32 bytes
+    padding: f32
 }
 
-struct SceneData {
-    cameraPos: vec3<f32>,
+struct ApplicationData {
+    cameraPosition: vec3<f32>,
     padding1: f32,
-    cameraForwards: vec3<f32>,
+    cameraForward: vec3<f32>,
     padding2: f32,
     cameraRight: vec3<f32>,
     padding3: f32,
@@ -43,9 +43,6 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
     const epsilon: f32 = 0.001;
     const maxDistance: f32 = 9999;
     const maxSteps: u32 = 32;
-    const forward: vec3<f32> = vec3<f32>(1.0, 0.0, 0.0);
-    const right: vec3<f32> = vec3<f32>(0.0, -1.0, 0.0);
-    const up: vec3<f32> = vec3<f32>(0.0, 0.0, 1.0);
 
     let screen_size: vec2<u32> = textureDimensions(color_buffer);
     let screen_pos : vec2<i32> = vec2<i32>(i32(GlobalInvocationID.x), i32(GlobalInvocationID.y));
@@ -57,15 +54,15 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
     mySphere.radius = 1.0;
 
     var myRay: Ray;
-    myRay.direction = normalize(forward + horizontal_coefficient * right + vertical_coefficient * up);
-    myRay.origin = vec3<f32>(0.0, 0.0, 0.0);
+    myRay.direction = normalize(application_data.cameraForward + horizontal_coefficient * application_data.cameraRight + vertical_coefficient * application_data.cameraUp);
+    myRay.origin = application_data.cameraPosition;
 
-    let pixel_color : vec3<f32> = rayColor(&myRay);
+    let pixel_color : vec3<f32> = ray_color(&myRay);
 
     textureStore(color_buffer, screen_pos, vec4<f32>(pixel_color, 1.0));
 }
 
-fn rayColor(ray: ptr<function,Ray>) -> vec3<f32> {
+fn ray_color(ray: ptr<function,Ray>) -> vec3<f32> {
     const epsilon: f32 = 0.01;
     const maxDistance: f32 = 9999;
     const maxSteps: u32 = 32;
@@ -96,7 +93,7 @@ fn distance_to_scene(
     closest_sphere_index: ptr<function,i32>) -> f32 {
 
     var closest_distance: f32 = 9999;
-    for (var i: i32 = 0; i < i32(scene.sphereCount); i++) {
+    for (var i: i32 = 0; i < i32(application_data.sphereCount); i++) {
 
         var distance: f32 = distance_to_sphere(ray, i);
         

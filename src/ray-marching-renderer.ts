@@ -19,11 +19,12 @@ export default class RasterizationRenderer {
 
     // 🔺 Resources
     rayMarchingPipeline: GPUComputePipeline;
-    rayMarchingPipelineBindGroup: GPUBindGroup;
+    rayMarchingGlobalBindGroup: GPUBindGroup;
+    rayMarchingObjectBindGroup: GPUBindGroup;
     postProcessingPipeline: GPURenderPipeline;
     postProcessingPipelineBindGroup: GPUBindGroup;
     sampler: GPUSampler;
-    applicationData: GPUBuffer;
+    applicationDataBuffer: GPUBuffer;
     sphereBuffer: GPUBuffer;
 
     commandEncoder: GPUCommandEncoder;
@@ -97,11 +98,11 @@ export default class RasterizationRenderer {
         this.sampler = this.device.createSampler(samplerDescriptor);
 
         const applicationDataBufferDescriptor: GPUBufferDescriptor = {
-            size: this.scene.sphereData.length,
+            size: 256, // 3 vec3 plus a f32 for sphere count + 3 f32 padding = 136 but buffer must be atleast 64 bytes and multiple of 16
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         };
 
-        this.applicationData = this.device.createBuffer(
+        this.applicationDataBuffer = this.device.createBuffer(
             applicationDataBufferDescriptor
         );
 
@@ -113,8 +114,8 @@ export default class RasterizationRenderer {
             sphereBufferDescriptor
         );
 
-        // Ray-marching pipeline setup
-        const rayMarchingBindGroupLayout = this.device.createBindGroupLayout({
+        // Ray-marching global binding setup
+        const rayMarchingGlobalBindGroupLayout = this.device.createBindGroupLayout({
             entries: [
                 {
                     binding: 0,
@@ -131,9 +132,31 @@ export default class RasterizationRenderer {
                     buffer: {
                         type: "uniform",
                     }
+                }
+            ]
+        });
+    
+        this.rayMarchingGlobalBindGroup = this.device.createBindGroup({
+            layout: rayMarchingGlobalBindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: this.colorTextureView
                 },
                 {
-                    binding: 2,
+                    binding: 1,
+                    resource: {
+                        buffer: this.applicationDataBuffer,
+                    }
+                }
+            ]
+        });
+
+        // Ray-marching object binding setup
+        const rayMarchingObjectBindGroupLayout = this.device.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
                     visibility: GPUShaderStage.COMPUTE,
                     buffer: {
                         type: "read-only-storage",
@@ -143,21 +166,11 @@ export default class RasterizationRenderer {
             ]
         });
     
-        this.rayMarchingPipelineBindGroup = this.device.createBindGroup({
-            layout: rayMarchingBindGroupLayout,
+        this.rayMarchingObjectBindGroup = this.device.createBindGroup({
+            layout: rayMarchingObjectBindGroupLayout,
             entries: [
                 {
                     binding: 0,
-                    resource: this.colorTextureView
-                },
-                {
-                    binding: 1,
-                    resource: {
-                        buffer: this.applicationData,
-                    }
-                },
-                {
-                    binding: 2,
                     resource: {
                         buffer: this.sphereBuffer,
                     }
@@ -165,8 +178,9 @@ export default class RasterizationRenderer {
             ]
         });
         
+        // Create ray marching pipeline layout and pipeline
         const rayMarchingPipelineLayout = this.device.createPipelineLayout({
-            bindGroupLayouts: [rayMarchingBindGroupLayout]
+            bindGroupLayouts: [rayMarchingGlobalBindGroupLayout, rayMarchingObjectBindGroupLayout]
         });
 
         this.rayMarchingPipeline = this.device.createComputePipeline({
@@ -260,36 +274,35 @@ export default class RasterizationRenderer {
     }
 
     createScene() {
-        // TODO identify how to move camera
-        const sceneData = {
+        // If updating this, make sure to update the size of the buffer that holds the sceneData
+        const applicationData = {
             cameraPos: this.scene.camera.position,
             cameraForwards: this.scene.camera.forward,
             cameraRight: this.scene.camera.right,
             cameraUp: this.scene.camera.up,
             sphereCount: this.scene.sphereData.length,
         }
-        console.log(sceneData.cameraPos);
 
         this.device.queue.writeBuffer(
-            this.applicationData, 0,
+            this.applicationDataBuffer, 0,
             new Float32Array(
                 [
-                    sceneData.cameraPos[0],
-                    sceneData.cameraPos[1],
-                    sceneData.cameraPos[2],
+                    applicationData.cameraPos[0],
+                    applicationData.cameraPos[1],
+                    applicationData.cameraPos[2],
                     0.0,
-                    sceneData.cameraForwards[0],
-                    sceneData.cameraForwards[1],
-                    sceneData.cameraForwards[2],
+                    applicationData.cameraForwards[0],
+                    applicationData.cameraForwards[1],
+                    applicationData.cameraForwards[2],
                     0.0,
-                    sceneData.cameraRight[0],
-                    sceneData.cameraRight[1],
-                    sceneData.cameraRight[2],
+                    applicationData.cameraRight[0],
+                    applicationData.cameraRight[1],
+                    applicationData.cameraRight[2],
                     0.0,
-                    sceneData.cameraUp[0],
-                    sceneData.cameraUp[1],
-                    sceneData.cameraUp[2],
-                    sceneData.sphereCount
+                    applicationData.cameraUp[0],
+                    applicationData.cameraUp[1],
+                    applicationData.cameraUp[2],
+                    applicationData.sphereCount
                 ]
             ), 0, 16
         )
@@ -317,7 +330,8 @@ export default class RasterizationRenderer {
 
         const rayMarchingComputePass = commandEncoder.beginComputePass();
         rayMarchingComputePass.setPipeline(this.rayMarchingPipeline);
-        rayMarchingComputePass.setBindGroup(0, this.rayMarchingPipelineBindGroup);
+        rayMarchingComputePass.setBindGroup(0, this.rayMarchingGlobalBindGroup);
+        rayMarchingComputePass.setBindGroup(1, this.rayMarchingObjectBindGroup);
         rayMarchingComputePass.dispatchWorkgroups(this.canvas.width, this.canvas.height, 1);
         rayMarchingComputePass.end();
 
