@@ -65,48 +65,58 @@ if (!argv.reduce((prev, cur) => prev || cur === '--watch', false)) {
     compiler.run((err, stats) => {
         if (err) return console.error(err);
 
-        if (stats.hasErrors()) {
-            let statsJson = stats.toJson();
+        if (stats && stats.hasErrors()) {
             console.log(
-                '❌' + ' · Error · ' + 'WebGPU-Sandbox failed to compile:'
+                '❌' + ' · Error · ' + 'WebGPU-Ray-Marching failed to compile:'
             );
-            for (let error of statsJson.errors) {
-                console.log(error.message);
+            let statsJson = stats.toJson();
+            if (statsJson && statsJson.errors) {
+                for (let error of statsJson.errors) {
+                    console.log(error.message);
+                }
             }
             return;
         }
-        console.log(
-            '✔️️' +
-                '  · Success · ' +
-                'WebGPU-Sandbox' +
-                (isProduction ? ' (production) ' : ' (development) ') +
-                'built in ' +
-                (+stats.endTime - +stats.startTime + ' ms.')
-        );
+        
+        if (stats) {
+            console.log(
+                '✔️️' +
+                    '  · Success · ' +
+                    'WebGPU-Ray-Marching' +
+                    (isProduction ? ' (production) ' : ' (development) ') +
+                    'built in ' +
+                    (+stats.endTime - +stats.startTime + ' ms.')
+            );
+        }
     });
 } else {
     compiler.watch({}, (err, stats) => {
         if (err) return console.error(err);
 
-        if (stats.hasErrors()) {
+        if (stats && stats.hasErrors()) {
             let statsJson = stats.toJson();
             console.log(
-                '❌' + ' · Error · ' + 'WebGPU-Sandbox failed to compile:'
+                '❌' + ' · Error · ' + 'WebGPU-Ray-Marching failed to compile:'
             );
-            for (let error of statsJson.errors) {
-                console.log(error.message);
+            if (statsJson && statsJson.errors) {
+                for (let error of statsJson.errors) {
+                    console.log(error.message);
+                }
             }
             console.log('\n👀  · Watching for changes... · \n');
             return;
         }
-        console.log(
-            '✔️️' +
-                '  · Success · ' +
-                'WebGPU-Sandbox' +
-                (isProduction ? ' (production) ' : ' (development) ') +
-                'built in ' +
-                (+stats.endTime - +stats.startTime + ' ms.') +
-                '\n👀  · Watching for changes... · \n'
-        );
+
+        if (stats) {
+            console.log(
+                '✔️️' +
+                    '  · Success · ' +
+                    'WebGPU-Ray-Marching' +
+                    (isProduction ? ' (production) ' : ' (development) ') +
+                    'built in ' +
+                    (+stats.endTime - +stats.startTime + ' ms.') +
+                    '\n👀  · Watching for changes... · \n'
+            );
+        }
     });
 }

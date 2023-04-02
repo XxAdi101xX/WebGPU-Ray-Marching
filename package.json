@@ -1,16 +1,16 @@
 {
-    "name": "WebGPU-Sandbox",
+    "name": "WebGPU-Ray-Marching",
     "version": "0.1.0",
     "description": "A WebGPU Sandbox",
     "main": "dist/main.js",
     "scripts": {
         "start": "npm i && npm run build && npm run dev",
         "dev": "http-server",
-        "build": "cross-env NODE_ENV=production ts-node webpack.ts"
+        "build": "cross-env NODE_ENV=development ts-node webpack.ts"
     },
     "repository": {
         "type": "git",
-        "url": "git+git@github.com:XxAdi101xX/WebGPU-Sandbox.git"
+        "url": "https://github.com/XxAdi101xX/WebGPU-Ray-Marching"
     },
     "keywords": [
         "webgpu",
@@ -19,7 +19,7 @@
     ],
     "author": "Adithya Venkatarao",
     "license": "MIT",
-    "homepage": "git@github.com:XxAdi101xX/WebGPU-Sandbox.git#README.md",
+    "homepage": "https://github.com/XxAdi101xX/WebGPU-Ray-Marching/blob/main/README.md",
     "devDependencies": {
         "@types/node": "^18.11.x",
         "@webgpu/types": "^0.1.26",
