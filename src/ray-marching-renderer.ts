@@ -98,7 +98,8 @@ export default class RasterizationRenderer {
         this.sampler = this.device.createSampler(samplerDescriptor);
 
         const applicationDataBufferDescriptor: GPUBufferDescriptor = {
-            size: 256, // 3 vec3 plus a f32 for sphere count + 3 f32 padding = 136 but buffer must be atleast 64 bytes and multiple of 16
+            label: "Application Data Buffer",
+            size: Float32Array.BYTES_PER_ELEMENT * 16, // 4 vec3 + f32 for sphere count + 3 f32 padding = 16 f32 entries; ensure atleast 64 bytes and multiple of 16
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         };
 
@@ -107,7 +108,8 @@ export default class RasterizationRenderer {
         );
 
         const sphereBufferDescriptor: GPUBufferDescriptor = {
-            size: 32 * this.scene.sphereData.length,
+            label: "Spheres Buffer",
+            size: Float32Array.BYTES_PER_ELEMENT * 16 /* 16 Float entires in struct*/ * this.scene.sphereData.length,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
         };
         this.sphereBuffer = this.device.createBuffer(
@@ -183,7 +185,7 @@ export default class RasterizationRenderer {
             bindGroupLayouts: [rayMarchingGlobalBindGroupLayout, rayMarchingObjectBindGroupLayout]
         });
 
-        this.rayMarchingPipeline = this.device.createComputePipeline({
+        this.rayMarchingPipeline = await this.device.createComputePipelineAsync({
             layout: rayMarchingPipelineLayout,
             compute: {
                 module: this.device.createShaderModule({
@@ -228,7 +230,7 @@ export default class RasterizationRenderer {
             bindGroupLayouts: [postProcessingBindGroupLayout]
         });
 
-        this.postProcessingPipeline = this.device.createRenderPipeline({
+        this.postProcessingPipeline = await this.device.createRenderPipelineAsync({
             layout: postProcessingPipelineLayout,
             
             vertex: {
@@ -276,8 +278,8 @@ export default class RasterizationRenderer {
     createScene() {
         // If updating this, make sure to update the size of the buffer that holds the sceneData
         const applicationData = {
-            cameraPos: this.scene.camera.position,
-            cameraForwards: this.scene.camera.forward,
+            cameraPosition: this.scene.camera.position,
+            cameraForward: this.scene.camera.forward,
             cameraRight: this.scene.camera.right,
             cameraUp: this.scene.camera.up,
             sphereCount: this.scene.sphereData.length,
@@ -287,13 +289,13 @@ export default class RasterizationRenderer {
             this.applicationDataBuffer, 0,
             new Float32Array(
                 [
-                    applicationData.cameraPos[0],
-                    applicationData.cameraPos[1],
-                    applicationData.cameraPos[2],
+                    applicationData.cameraPosition[0],
+                    applicationData.cameraPosition[1],
+                    applicationData.cameraPosition[2],
                     0.0,
-                    applicationData.cameraForwards[0],
-                    applicationData.cameraForwards[1],
-                    applicationData.cameraForwards[2],
+                    applicationData.cameraForward[0],
+                    applicationData.cameraForward[1],
+                    applicationData.cameraForward[2],
                     0.0,
                     applicationData.cameraRight[0],
                     applicationData.cameraRight[1],
@@ -356,12 +358,24 @@ export default class RasterizationRenderer {
     }
 
     render = () => {
+        const start: number = performance.now();
+
         // ⏭ Acquire next image from context
         this.colorTexture = this.context.getCurrentTexture();
         this.colorTextureView = this.colorTexture.createView();
 
         // 📦 Write and submit commands to queue
         this.encodeCommands();
+
+        this.device.queue.onSubmittedWorkDone().then(
+            () => {
+                const end: number = performance.now();
+                const performanceLabel: HTMLElement =  <HTMLElement> document.getElementById("render-time");
+                if (performanceLabel) {
+                    performanceLabel.innerText = (end - start).toFixed(2);
+                }
+            }
+        );
 
         // ➿ Refresh canvas
         requestAnimationFrame(this.render);

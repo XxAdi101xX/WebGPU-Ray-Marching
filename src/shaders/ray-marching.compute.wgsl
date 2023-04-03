@@ -73,7 +73,7 @@ fn ray_march(ray: ptr<function,Ray>) -> vec3<f32> {
             if (enable_lighting) {
                 const intensity_multiplier: f32 = 1.4;
                 let normal = calculate_normal(marched_position, (*ray).direction, &i);
-                let light_position = vec3(2.0, -5.0, 3.0);
+                let light_position = vec3(-2.0, 0.0, 5.0);
                 let direction_to_light = normalize(marched_position - light_position);
                 let diffuse_intensity = max(0.0, dot(normal, direction_to_light)) * intensity_multiplier;
                 color = objects.spheres[i].color * diffuse_intensity;
