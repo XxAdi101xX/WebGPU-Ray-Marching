@@ -259,7 +259,7 @@ export default class RasterizationRenderer {
     }
 
     // ↙️ Resize swapchain, frame buffer attachments
-    resizeBackings() {
+    resizeBackings(): void {
         // ⛓️ Swapchain
         if (!this.context) {
             this.context = this.canvas.getContext('webgpu');
@@ -275,7 +275,7 @@ export default class RasterizationRenderer {
         }
     }
 
-    createScene() {
+    createScene(): void {
         // If updating this, make sure to update the size of the buffer that holds the sceneData
         const applicationData = {
             cameraPosition: this.scene.camera.position,
@@ -325,8 +325,9 @@ export default class RasterizationRenderer {
     }
 
     // ✍️ Write commands to send to the GPU
-    encodeCommands() {
+    encodeCommands(): void {
         this.createScene();
+        this.scene.camera.update();
 
         const commandEncoder = this.device.createCommandEncoder();
 
@@ -357,7 +358,7 @@ export default class RasterizationRenderer {
         this.device.queue.submit([commandEncoder.finish()]);
     }
 
-    render = () => {
+    render = (): void => {
         const start: number = performance.now();
 
         // ⏭ Acquire next image from context
