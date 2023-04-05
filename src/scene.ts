@@ -9,8 +9,14 @@ export class Scene {
     mouseClicked: boolean
 
     constructor() {
-        this.sphereData = new Array(10);
-        for (let i = 0; i < this.sphereData.length; ++i) {
+        this.sphereData = new Array(2);
+        // Hardcode first sphere
+        const center: vec3 = [0.0, 0.0, 3.0];
+        const radius: number = 1.1;
+        const color: vec3 = [0.0, 0.5, 0.8];
+        this.sphereData[0] = new Sphere(center, radius, color);
+
+        for (let i = 1; i < this.sphereData.length; ++i) {
             const center: vec3 = [
                 3.0 + 7.0 * Math.random(),
                 -5.0 + 10.0 * Math.random(),

@@ -97,10 +97,10 @@ fn closest_distance_in_scene(
     ray_direction: vec3<f32>, 
     closest_sphere_index: ptr<function,i32>
 ) -> f32 {
+    var distance: f32;
     var closest_distance: f32 = 9999.0;
     for (var i: i32 = 0; i < i32(application_data.sphere_count); i++) {
-
-        var distance: f32 = signed_dst_to_sphere(marched_position, ray_direction, i);
+        distance = signed_dst_to_sphere(marched_position, ray_direction, i);
         
         if (distance < closest_distance) {
             // Noise to distort the sphere: https://michaelwalczyk.com/blog-ray-marching.html
@@ -108,6 +108,13 @@ fn closest_distance_in_scene(
             closest_distance = distance + displacement;
             *closest_sphere_index = i;
         }
+    }
+
+    // Torus
+    distance = signed_dst_to_torus(marched_position, vec3(0.0, 0.0, 0.0), vec2(1.0, 0.6));
+    if (distance < closest_distance) {
+        closest_distance = distance;
+        // set color here, defaulted to closest 
     }
 
     return closest_distance;
@@ -142,6 +149,19 @@ fn signed_dst_to_sphere(
     }
     
     return length(ray_to_sphere) - objects.spheres[sphere_index].radius;
+}
+
+// TODO: add torus data on the CPU side
+fn signed_dst_to_torus(
+    marched_position: vec3<f32>,
+    center: vec3<f32>,
+    radii: vec2<f32>,
+) -> f32 {
+    let ray_to_torus: vec3<f32> = center - marched_position;
+
+    let q: vec2<f32> = vec2(length(ray_to_torus.xz) - radii.x, marched_position.y);
+    
+    return length(q) - radii.y;
 }
 
 // TODO: currently not tested or used
