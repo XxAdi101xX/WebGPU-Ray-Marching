@@ -3,13 +3,26 @@ import { vec3 } from "gl-matrix";
 import { Sphere } from "./primatives";
 import { Camera } from "./camera";
 
+export class Light {
+    position: vec3;
+    padding: number;
+
+    constructor(position: vec3) {
+        this.position = position;
+        this.padding = 0.0;
+    }
+}
+
 export class Scene {
     sphereData: Sphere[];
     camera: Camera;
+    lights: Light[];
+
     mouseClicked: boolean
 
     constructor() {
-        this.sphereData = new Array(2);
+        // Setup spheres
+        this.sphereData = new Array(5);
         // Hardcode first sphere
         const center: vec3 = [0.0, 0.0, 3.0];
         const radius: number = 1.1;
@@ -34,7 +47,13 @@ export class Scene {
             this.sphereData[i] = new Sphere(center, radius, color);
         }
         
+        // Setup camera
         this.camera = new Camera([-10.0, 0.0, 0.0], 0.0, 0.0);
+
+        // Setup lights
+        this.lights = new Array(1);
+        this.lights[0] = new Light([-4.0, 0.0, 4.0]);
+
         this.mouseClicked = false;
 
         document.addEventListener("keydown", this.#handleKeyDown);

@@ -25,6 +25,7 @@ export default class RasterizationRenderer {
     postProcessingPipelineBindGroup: GPUBindGroup;
     sampler: GPUSampler;
     applicationDataBuffer: GPUBuffer;
+    lightBuffer: GPUBuffer;
     sphereBuffer: GPUBuffer;
 
     commandEncoder: GPUCommandEncoder;
@@ -107,6 +108,16 @@ export default class RasterizationRenderer {
             applicationDataBufferDescriptor
         );
 
+        const lightBufferDescriptor: GPUBufferDescriptor = {
+            label: "Light Buffer",
+            size: Float32Array.BYTES_PER_ELEMENT * 4, // 3 for light position, 1 padding
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        };
+
+        this.lightBuffer = this.device.createBuffer(
+            lightBufferDescriptor
+        );
+
         const sphereBufferDescriptor: GPUBufferDescriptor = {
             label: "Spheres Buffer",
             size: Float32Array.BYTES_PER_ELEMENT * 16 /* 16 Float entires in struct*/ * this.scene.sphereData.length,
@@ -134,6 +145,13 @@ export default class RasterizationRenderer {
                     buffer: {
                         type: "uniform",
                     }
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage",
+                    }
                 }
             ]
         });
@@ -149,6 +167,12 @@ export default class RasterizationRenderer {
                     binding: 1,
                     resource: {
                         buffer: this.applicationDataBuffer,
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: this.lightBuffer,
                     }
                 }
             ]
@@ -276,15 +300,19 @@ export default class RasterizationRenderer {
     }
 
     createScene(): void {
-        // If updating this, make sure to update the size of the buffer that holds the sceneData
+        // If updating these objects, make sure to update the size of the buffer that holds the sceneData
         const applicationData = {
             cameraPosition: this.scene.camera.position,
+            lightCount: this.scene.lights.length,
             cameraForward: this.scene.camera.forward,
-            cameraRight: this.scene.camera.right,
-            cameraUp: this.scene.camera.up,
             sphereCount: this.scene.sphereData.length,
+            cameraRight: this.scene.camera.right,
+            padding1: 0.0,
+            cameraUp: this.scene.camera.up,
+            padding2: 0.0
         }
 
+        // Write application data
         this.device.queue.writeBuffer(
             this.applicationDataBuffer, 0,
             new Float32Array(
@@ -292,36 +320,49 @@ export default class RasterizationRenderer {
                     applicationData.cameraPosition[0],
                     applicationData.cameraPosition[1],
                     applicationData.cameraPosition[2],
-                    0.0,
+                    applicationData.lightCount,
                     applicationData.cameraForward[0],
                     applicationData.cameraForward[1],
                     applicationData.cameraForward[2],
-                    0.0,
+                    applicationData.sphereCount,
                     applicationData.cameraRight[0],
                     applicationData.cameraRight[1],
                     applicationData.cameraRight[2],
-                    0.0,
+                    applicationData.padding1,
                     applicationData.cameraUp[0],
                     applicationData.cameraUp[1],
                     applicationData.cameraUp[2],
-                    applicationData.sphereCount
+                    applicationData.padding2
                 ]
             ), 0, 16
         )
 
-        const sphereData: Float32Array = new Float32Array(8 * this.scene.sphereData.length);
+        // Write light data
+        const lightStructSize: number = 4;
+        const lightData: Float32Array = new Float32Array(lightStructSize * this.scene.lights.length);
+        for (let i = 0; i < this.scene.lights.length; i++) {
+            lightData[lightStructSize * i] = this.scene.lights[i].position[0];
+            lightData[lightStructSize * i + 1] = this.scene.lights[i].position[1];
+            lightData[lightStructSize * i + 2] = this.scene.lights[i].position[2];
+            lightData[lightStructSize * i + 3] = this.scene.lights[i].padding;
+        }
+        this.device.queue.writeBuffer(this.lightBuffer, 0, lightData, 0, lightStructSize * this.scene.lights.length);
+
+        // Write sphere data
+        const sphereStructSize: number = 8;
+        const sphereData: Float32Array = new Float32Array(sphereStructSize * this.scene.sphereData.length);
         for (let i = 0; i < this.scene.sphereData.length; i++) {
-            sphereData[8*i] = this.scene.sphereData[i].center[0];
-            sphereData[8*i + 1] = this.scene.sphereData[i].center[1];
-            sphereData[8*i + 2] = this.scene.sphereData[i].center[2];
-            sphereData[8*i + 3] = this.scene.sphereData[i].radius;
-            sphereData[8*i + 4] = this.scene.sphereData[i].color[0];
-            sphereData[8*i + 5] = this.scene.sphereData[i].color[1];
-            sphereData[8*i + 6] = this.scene.sphereData[i].color[2];
-            sphereData[8*i + 7] = this.scene.sphereData[i].padding;
+            sphereData[sphereStructSize * i] = this.scene.sphereData[i].center[0];
+            sphereData[sphereStructSize * i + 1] = this.scene.sphereData[i].center[1];
+            sphereData[sphereStructSize * i + 2] = this.scene.sphereData[i].center[2];
+            sphereData[sphereStructSize * i + 3] = this.scene.sphereData[i].radius;
+            sphereData[sphereStructSize * i + 4] = this.scene.sphereData[i].color[0];
+            sphereData[sphereStructSize * i + 5] = this.scene.sphereData[i].color[1];
+            sphereData[sphereStructSize * i + 6] = this.scene.sphereData[i].color[2];
+            sphereData[sphereStructSize * i + 7] = this.scene.sphereData[i].padding;
         }
 
-        this.device.queue.writeBuffer(this.sphereBuffer, 0, sphereData, 0, 8 * this.scene.sphereData.length);
+        this.device.queue.writeBuffer(this.sphereBuffer, 0, sphereData, 0, sphereStructSize * this.scene.sphereData.length);
     }
 
     // ✍️ Write commands to send to the GPU

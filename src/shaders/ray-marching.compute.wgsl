@@ -4,30 +4,42 @@ var output_buffer: texture_storage_2d<rgba8unorm, write>;
 @group(0) @binding(1)
 var<uniform> application_data: ApplicationData;
 
+@group(0) @binding(2)
+var<storage, read> light_data: LightData;
+
 @group(1) @binding(0)
 var<storage, read> objects: ObjectData;
 
 // CPU/GPU structs
+struct ApplicationData {
+    camera_position: vec3<f32>,
+    light_count: f32,
+    camera_forward: vec3<f32>,
+    sphere_count: f32,
+    camera_right: vec3<f32>,
+    padding1: f32,
+    camera_up: vec3<f32>,
+    padding2: f32,
+}
+
+struct Light {
+    position: vec3<f32>,
+    padding: f32,
+}
+
+struct LightData {
+    lights: array<Light>,
+}
+
 struct Sphere {
     center: vec3<f32>,
     radius: f32,
     color: vec3<f32>,
-    padding: f32
-}
-
-struct ApplicationData {
-    camera_position: vec3<f32>,
-    padding1: f32,
-    camera_forward: vec3<f32>,
-    padding2: f32,
-    camera_right: vec3<f32>,
-    padding3: f32,
-    camera_up: vec3<f32>,
-    sphere_count: f32,
+    padding: f32,
 }
 
 struct ObjectData {
-    spheres: array<Sphere>,
+    spheres: array<Sphere>
 }
 
 // GPU only struct
@@ -65,7 +77,7 @@ fn ray_march(ray: ptr<function,Ray>) -> vec3<f32> {
 
     for (var step: u32 = 0; step < max_steps; step++) {
         let marched_position: vec3<f32> = (*ray).origin + (*ray).direction * total_distance_marched;
-        var i: i32 = 0;
+        var i: u32 = 0;
         var distance_marched: f32 = closest_distance_in_scene(marched_position, (*ray).direction, &i);
         
         if (distance_marched < epsilon) {
@@ -73,10 +85,13 @@ fn ray_march(ray: ptr<function,Ray>) -> vec3<f32> {
             if (enable_lighting) {
                 const intensity_multiplier: f32 = 1.4;
                 let normal = calculate_normal(marched_position, (*ray).direction, &i);
-                let light_position = vec3(-2.0, 0.0, 5.0);
-                let direction_to_light = normalize(marched_position - light_position);
-                let diffuse_intensity = max(0.0, dot(normal, direction_to_light)) * intensity_multiplier;
-                color = objects.spheres[i].color * diffuse_intensity;
+
+                for (var lightIndex: u32 = 0; lightIndex < u32(application_data.light_count); lightIndex++) { 
+                    let light_position = light_data.lights[lightIndex].position;
+                    let direction_to_light = normalize(marched_position - light_position);
+                    let diffuse_intensity = max(0.0, dot(normal, direction_to_light)) * intensity_multiplier;
+                    color += objects.spheres[i].color * diffuse_intensity;
+                }
             } else {
                 color = objects.spheres[i].color;
             }
@@ -95,11 +110,11 @@ fn ray_march(ray: ptr<function,Ray>) -> vec3<f32> {
 fn closest_distance_in_scene(
     marched_position: vec3<f32>,  // Position along ray marched so far
     ray_direction: vec3<f32>, 
-    closest_sphere_index: ptr<function,i32>
+    closest_sphere_index: ptr<function,u32>
 ) -> f32 {
     var distance: f32;
     var closest_distance: f32 = 9999.0;
-    for (var i: i32 = 0; i < i32(application_data.sphere_count); i++) {
+    for (var i: u32 = 0; i < u32(application_data.sphere_count); i++) {
         distance = signed_dst_to_sphere(marched_position, ray_direction, i);
         
         if (distance < closest_distance) {
@@ -123,7 +138,7 @@ fn closest_distance_in_scene(
 fn calculate_normal(
     marched_position: vec3<f32>,
     ray_direction: vec3<f32>, 
-    closest_sphere_index: ptr<function,i32>
+    closest_sphere_index: ptr<function,u32>
 ) -> vec3<f32> {
     const small_step: vec3<f32> = vec3(epsilon, 0.0, 0.0);
 
@@ -139,7 +154,7 @@ fn calculate_normal(
 fn signed_dst_to_sphere(
     marched_position: vec3<f32>,
     ray_direction: vec3<f32>,
-    sphere_index: i32
+    sphere_index: u32
 ) -> f32 {
     let ray_to_sphere: vec3<f32> = objects.spheres[sphere_index].center - marched_position;
 
