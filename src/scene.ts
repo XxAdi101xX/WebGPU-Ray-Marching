@@ -52,7 +52,7 @@ export class Scene {
 
         // Setup lights
         this.lights = new Array(1);
-        this.lights[0] = new Light([-4.0, 0.0, 4.0]);
+        this.lights[0] = new Light([11.0, -15.0, 17.0]);
 
         this.mouseClicked = false;
 
@@ -60,6 +60,19 @@ export class Scene {
         document.addEventListener("mousedown", this.#handleMouseDown);
         document.addEventListener("mouseup", this.#handleMouseUp);
         document.addEventListener("mousemove", this.#handleMouseEvent);
+
+        // TODO: this code only expects one light to control atm
+        const lightX = document.getElementById("lightX");
+        const lightY = document.getElementById("lightY");
+        const lightZ = document.getElementById("lightZ");
+        
+        lightX.value = this.lights[0].position[0];
+        lightY.value = this.lights[0].position[1];
+        lightZ.value = this.lights[0].position[2];
+
+        lightX.addEventListener("input", this.#updateLight);
+        lightY.addEventListener("input", this.#updateLight);
+        lightZ.addEventListener("input", this.#updateLight);
     }
 
     #handleKeyDown = (event: KeyboardEvent): void => {
@@ -104,5 +117,17 @@ export class Scene {
                 this.camera.euler[1] + dy
             )
         );
+    }
+
+    #updateLight = (event) => {
+        const inputId = event.target.id;
+        const inputValue = event.target.value;
+        if (inputId === "lightX") {
+            this.lights[0].position[0] = inputValue;
+        } else if (inputId === "lightY") {
+            this.lights[0].position[1] = inputValue;
+        } else if (inputId === "lightZ") {
+            this.lights[0].position[2] = inputValue;
+        }
     }
 }
