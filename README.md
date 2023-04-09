@@ -1,7 +1,7 @@
 # WebGPU Ray Marching
 A rendering engine created using WebGPU that implements the sphere tracing algorithm to march rays across the scene to detect primative boundaries using their respective signed-distance functions. 
 
-![webgpu-raymarcher](https://user-images.githubusercontent.com/18451835/230233957-a394b89a-a8b2-47fe-892a-e84e9a2a7040.png)
+![webgpu-raymarcher](https://user-images.githubusercontent.com/18451835/230788463-42ecb45b-5a65-4384-bc16-a7c83a6506b1.png)
 
 ## Resources
 Some of the great learning resources that I've used for technical help and motivation:
