@@ -26,7 +26,7 @@ export class Camera {
         vec3.cross(this.up, this.right, this.forward);
     }
 
-    pan(dx: number, dy: number): void {
+    pan(dx: number, dy: number, dz: number): void {
         // Moving front/back
         vec3.scaleAndAdd(
             this.position, this.position, 
@@ -37,6 +37,12 @@ export class Camera {
         vec3.scaleAndAdd(
             this.position, this.position, 
             this.right, dy
+        );
+
+        // Moving up/down
+        vec3.scaleAndAdd(
+            this.position, this.position, 
+            this.up, dz
         );
     }
 

@@ -79,16 +79,22 @@ export class Scene {
         const movementFactor: number = 0.4;
 
         if (event.code == "KeyW") {
-            this.camera.pan(movementFactor, 0.0);
+            this.camera.pan(movementFactor, 0.0, 0.0);
         }
         if (event.code == "KeyS") {
-            this.camera.pan(-movementFactor, 0.0);
+            this.camera.pan(-movementFactor, 0.0, 0.0);
         }
         if (event.code == "KeyA") {
-            this.camera.pan(0.0, -movementFactor);
+            this.camera.pan(0.0, -movementFactor, 0.0);
         }
         if (event.code == "KeyD") {
-            this.camera.pan(0.0, movementFactor);
+            this.camera.pan(0.0, movementFactor, 0.0);
+        }
+        if (event.code == "KeyE") {
+            this.camera.pan(0.0, 0.0, movementFactor);
+        }
+        if (event.code == "KeyQ") {
+            this.camera.pan(0.0, 0.0, -movementFactor);
         }
     }
 
