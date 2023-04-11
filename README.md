@@ -8,3 +8,4 @@ Some of the great learning resources that I've used for technical help and motiv
 - The offical [WebGPU Samples](https://webgpu.github.io/webgpu-samples)
 - [Inigo Quizel's](https://iquilezles.org/) plethora of amazing blog posts and shadertoy samples of ray marching
 - Raymarching Video Tutorial by the [GetIntoGameDev](https://www.youtube.com/watch?v=EifzQ7YsH2E&list=PLn3eTxaOtL2O6Yr-wpSRiNS9W-ZEAfPjH&index=1) youtube channel
+- [Michael Walczyk's blogpost](https://michaelwalczyk.com/blog-ray-marching.html) on raymarching
