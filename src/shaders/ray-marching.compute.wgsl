@@ -77,23 +77,23 @@ fn ray_march_opaque_primatives(ray: ptr<function,Ray>) -> vec3<f32> {
 
     for (var step: u32 = 0; step < max_steps; step++) {
         let marched_position: vec3<f32> = (*ray).origin + (*ray).direction * total_distance_marched;
-        var i: u32 = 0;
-        var distance_marched: f32 = closest_distance_in_scene(marched_position, (*ray).direction, &i);
+        var closest_primative_color: vec3<f32> = vec3(0.0, 0.0, 0.0); // Defaulted to black for background
+        var distance_marched: f32 = closest_distance_in_scene(marched_position, (*ray).direction, &closest_primative_color);
         
         if (distance_marched < epsilon) {
             const enable_lighting: bool = true;
             if (enable_lighting) {
                 const intensity_multiplier: f32 = 1.4;
-                let normal = calculate_normal(marched_position, (*ray).direction, &i);
+                let normal = calculate_normal(marched_position, (*ray).direction, &closest_primative_color);
 
                 for (var lightIndex: u32 = 0; lightIndex < u32(application_data.light_count); lightIndex++) { 
                     let light_position: vec3<f32> = light_data.lights[lightIndex].position;
                     let direction_to_light: vec3<f32> = normalize(marched_position - light_position);
                     let diffuse_intensity: f32 = max(0.0, dot(normal, direction_to_light)) * intensity_multiplier;
-                    color += objects.spheres[i].color * diffuse_intensity;
+                    color += closest_primative_color * diffuse_intensity;
                 }
             } else {
-                color = objects.spheres[i].color;
+                color = closest_primative_color;
             }
             break; 
         }
@@ -110,7 +110,7 @@ fn ray_march_opaque_primatives(ray: ptr<function,Ray>) -> vec3<f32> {
 fn closest_distance_in_scene(
     marched_position: vec3<f32>,  // Position along ray marched so far
     ray_direction: vec3<f32>, 
-    closest_sphere_index: ptr<function,u32>
+    closest_primative_color: ptr<function, vec3<f32>>
 ) -> f32 {
     var distance: f32;
     var closest_distance: f32 = 9999.0;
@@ -121,7 +121,7 @@ fn closest_distance_in_scene(
             // Noise to distort the sphere: https://michaelwalczyk.com/blog-ray-marching.html
             let displacement: f32 = sin(5.0 * marched_position.x) * sin(5.0 * marched_position.y) * sin(5.0 * marched_position.z) * 0.25;
             closest_distance = distance + displacement;
-            *closest_sphere_index = i;
+            *closest_primative_color = objects.spheres[i].color;
         }
     }
 
@@ -129,7 +129,7 @@ fn closest_distance_in_scene(
     distance = signed_dst_to_torus(marched_position, vec3(0.0, 0.0, 0.0), vec2(1.0, 0.6));
     if (distance < closest_distance) {
         closest_distance = distance;
-        // set color here, defaulted to closest sphere colour
+        *closest_primative_color = vec3(0.0, 1.0, 0.0);
     }
 
     // Plane
@@ -146,13 +146,13 @@ fn closest_distance_in_scene(
 fn calculate_normal(
     marched_position: vec3<f32>,
     ray_direction: vec3<f32>, 
-    closest_sphere_index: ptr<function,u32>
+    closest_primative_color: ptr<function, vec3<f32>>
 ) -> vec3<f32> {
     const small_step: vec3<f32> = vec3(epsilon, 0.0, 0.0);
 
-    let gradient_x: f32 = closest_distance_in_scene(marched_position + small_step.xyy, ray_direction, closest_sphere_index) - closest_distance_in_scene(marched_position - small_step.xyy, ray_direction, closest_sphere_index);
-    let gradient_y: f32 = closest_distance_in_scene(marched_position + small_step.yxy, ray_direction, closest_sphere_index) - closest_distance_in_scene(marched_position - small_step.yxy, ray_direction, closest_sphere_index);
-    let gradient_z: f32 = closest_distance_in_scene(marched_position + small_step.yyx, ray_direction, closest_sphere_index) - closest_distance_in_scene(marched_position - small_step.yyx, ray_direction, closest_sphere_index);
+    let gradient_x: f32 = closest_distance_in_scene(marched_position + small_step.xyy, ray_direction, closest_primative_color) - closest_distance_in_scene(marched_position - small_step.xyy, ray_direction, closest_primative_color);
+    let gradient_y: f32 = closest_distance_in_scene(marched_position + small_step.yxy, ray_direction, closest_primative_color) - closest_distance_in_scene(marched_position - small_step.yxy, ray_direction, closest_primative_color);
+    let gradient_z: f32 = closest_distance_in_scene(marched_position + small_step.yyx, ray_direction, closest_primative_color) - closest_distance_in_scene(marched_position - small_step.yyx, ray_direction, closest_primative_color);
 
     let normal: vec3<f32> = vec3(gradient_x, gradient_y, gradient_z);
 
