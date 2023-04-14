@@ -52,7 +52,7 @@ export class Scene {
 
         // Setup lights
         this.lights = new Array(1);
-        this.lights[0] = new Light([11.0, -15.0, 17.0]);
+        this.lights[0] = new Light([11.0, -15.0, -12.0]);
 
         this.mouseClicked = false;
 

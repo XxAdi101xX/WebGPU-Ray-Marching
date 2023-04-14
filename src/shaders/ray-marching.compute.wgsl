@@ -66,12 +66,12 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
     ray.direction = normalize(application_data.camera_forward + horizontal_coefficient * application_data.camera_right + vertical_coefficient * application_data.camera_up);
     ray.origin = application_data.camera_position;
 
-    let pixel_color : vec3<f32> = ray_march(&ray);
+    let pixel_color : vec3<f32> = ray_march_opaque_primatives(&ray);
 
     textureStore(output_buffer, screen_pos, vec4<f32>(pixel_color, 1.0));
 }
 
-fn ray_march(ray: ptr<function,Ray>) -> vec3<f32> {
+fn ray_march_opaque_primatives(ray: ptr<function,Ray>) -> vec3<f32> {
     var color: vec3<f32> = vec3(0.0, 0.0, 0.0);
     var total_distance_marched: f32 = 0.0;
 
@@ -87,9 +87,9 @@ fn ray_march(ray: ptr<function,Ray>) -> vec3<f32> {
                 let normal = calculate_normal(marched_position, (*ray).direction, &i);
 
                 for (var lightIndex: u32 = 0; lightIndex < u32(application_data.light_count); lightIndex++) { 
-                    let light_position = light_data.lights[lightIndex].position;
-                    let direction_to_light = normalize(marched_position - light_position);
-                    let diffuse_intensity = max(0.0, dot(normal, direction_to_light)) * intensity_multiplier;
+                    let light_position: vec3<f32> = light_data.lights[lightIndex].position;
+                    let direction_to_light: vec3<f32> = normalize(marched_position - light_position);
+                    let diffuse_intensity: f32 = max(0.0, dot(normal, direction_to_light)) * intensity_multiplier;
                     color += objects.spheres[i].color * diffuse_intensity;
                 }
             } else {
@@ -129,8 +129,16 @@ fn closest_distance_in_scene(
     distance = signed_dst_to_torus(marched_position, vec3(0.0, 0.0, 0.0), vec2(1.0, 0.6));
     if (distance < closest_distance) {
         closest_distance = distance;
-        // set color here, defaulted to closest 
+        // set color here, defaulted to closest sphere colour
     }
+
+    // Plane
+    /*
+    distance = signed_dst_to_plane(marched_position, vec3(0.0, 0.0, 1.0), 0.0);
+    if (distance < closest_distance) {
+        closest_distance = distance;
+        // set color here, defaulted to closest sphere colour
+    }*/
 
     return closest_distance;
 }
@@ -151,6 +159,17 @@ fn calculate_normal(
     return normalize(normal);
 }
 
+// NOT USED YET
+fn diffuse(normal: vec3<f32>, lightPosition: vec3<f32>, diffuse: vec3<f32>) -> vec3<f32> {
+    let nDotL: f32 = dot(normal, lightPosition);
+    return clamp(nDotL * diffuse, vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(1.0, 1.0, 1.0));
+}
+// NOT USED YET
+fn ambient_light() -> vec3<f32> {
+	return 1.2 * vec3(0.03, 0.018, 0.018);
+}
+
+// Signed distance functions
 fn signed_dst_to_sphere(
     marched_position: vec3<f32>,
     ray_direction: vec3<f32>,
@@ -177,6 +196,15 @@ fn signed_dst_to_torus(
     let q: vec2<f32> = vec2(length(ray_to_torus.xz) - radii.x, marched_position.y);
     
     return length(q) - radii.y;
+}
+
+// TODO: add plane data on the CPU side
+fn signed_dst_to_plane(
+    marched_position: vec3<f32>,
+    normal: vec3<f32>,
+    h: f32
+) -> f32 {
+    return dot(marched_position, normal) + h;
 }
 
 // TODO: currently not tested or used
