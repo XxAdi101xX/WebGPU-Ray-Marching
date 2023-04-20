@@ -22,7 +22,7 @@ export class Scene {
 
     constructor() {
         // Setup spheres
-        this.sphereData = new Array(5);
+        this.sphereData = new Array(1);
         // Hardcode first sphere
         const center: vec3 = [0.0, 0.0, 3.0];
         const radius: number = 1.1;
