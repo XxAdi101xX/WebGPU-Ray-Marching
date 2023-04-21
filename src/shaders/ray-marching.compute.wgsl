@@ -10,8 +10,9 @@ var<storage, read> light_data: LightData;
 @group(1) @binding(0)
 var<storage, read> objects: ObjectData;
 
-// CPU/GPU structs
-struct ApplicationData {
+/* CPU/GPU structs */
+struct ApplicationData
+{
     camera_position: vec3<f32>,
     light_count: f32,
     camera_forward: vec3<f32>,
@@ -22,41 +23,47 @@ struct ApplicationData {
     padding2: f32,
 }
 
-struct Light {
+struct Light
+{
     position: vec3<f32>,
     padding: f32,
 }
 
-struct LightData {
+struct LightData
+{
     lights: array<Light>,
 }
 
-struct Sphere {
+struct Sphere
+{
     center: vec3<f32>,
     radius: f32,
     color: vec3<f32>,
     padding: f32,
 }
 
-struct ObjectData {
+struct ObjectData
+{
     spheres: array<Sphere>
 }
 
-// GPU only struct
-struct Ray {
+/* GPU only struct */
+struct Ray
+{
     direction: vec3<f32>,
     padding1: f32,
     origin: vec3<f32>,
     padding2: f32
 }
 
+/* General ray marching constants */
 const epsilon: f32 = 0.001;
 const max_distance: f32 = 9999.0;
 const max_steps: u32 = 32;
 
-// Methods
 @compute @workgroup_size(64,1,1)
-fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
+fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>)
+{
     let screen_size: vec2<u32> = textureDimensions(output_buffer);
     let screen_pos : vec2<i32> = vec2<i32>(i32(GlobalInvocationID.x), i32(GlobalInvocationID.y));
     let horizontal_coefficient: f32 = (f32(screen_pos.x) - f32(screen_size.x) / 2) / f32(screen_size.x);
@@ -71,71 +78,42 @@ fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>) {
     textureStore(output_buffer, screen_pos, vec4<f32>(pixel_color, 1.0));
 }
 
-fn ray_march_opaque_primatives(ray: ptr<function,Ray>) -> vec3<f32> {
+fn ray_march_opaque_primatives(ray: ptr<function,Ray>) -> vec3<f32>
+{
     var color: vec3<f32> = vec3(0.0, 0.0, 0.0);
     var total_distance_marched: f32 = 0.0;
 
-    for (var step: u32 = 0; step < max_steps; step++) {
+    for (var step: u32 = 0; step < max_steps; step++)
+    {
         let marched_position: vec3<f32> = (*ray).origin + (*ray).direction * total_distance_marched;
         var closest_primative_color: vec3<f32> = vec3(0.0, 0.0, 0.0); // Defaulted to black for background
 
         let normal = calculate_normal(marched_position, (*ray).direction, &closest_primative_color);
         let distance_marched: f32 = closest_distance_in_scene(marched_position, (*ray).direction, &closest_primative_color);
         
-        if (distance_marched < epsilon) {
+        if (distance_marched < epsilon)
+        {
             const enable_lighting: bool = true; // Disable to reduce computational cost
-            if (enable_lighting) {
+            if (enable_lighting)
+            {
                 let reflection_direction: vec3<f32> = reflect((*ray).direction, normal);
                 calculate_phong_lighting(marched_position, normal, reflection_direction, &color);
-            } else {
+            }
+            else
+            {
                 color = closest_primative_color;
             }
             break; 
         }
         
-        if (total_distance_marched > max_distance) {
+        if (total_distance_marched > max_distance)
+        {
             break;
         }
         total_distance_marched += distance_marched;
     }
 
     return color;
-}
-
-fn closest_distance_in_scene(
-    marched_position: vec3<f32>,  // Position along ray marched so far
-    ray_direction: vec3<f32>, 
-    closest_primative_color: ptr<function, vec3<f32>>
-) -> f32 {
-    var distance: f32;
-    var closest_distance: f32 = 9999.0;
-    for (var i: u32 = 0; i < u32(application_data.sphere_count); i++) {
-        distance = signed_dst_to_sphere(marched_position, ray_direction, i);
-        
-        if (distance < closest_distance) {
-            // Noise to distort the sphere: https://michaelwalczyk.com/blog-ray-marching.html
-            let displacement: f32 = sin(5.0 * marched_position.x) * sin(5.0 * marched_position.y) * sin(5.0 * marched_position.z) * 0.25;
-            closest_distance = distance + displacement;
-            *closest_primative_color = objects.spheres[i].color;
-        }
-    }
-
-    // Torus
-    distance = signed_dst_to_torus(marched_position, vec3(0.0, 0.0, 0.0), vec2(1.0, 0.6));
-    if (distance < closest_distance) {
-        closest_distance = distance;
-        *closest_primative_color = vec3(0.0, 1.0, 0.0);
-    }
-
-    // Plane
-    /*
-    distance = signed_dst_to_plane(marched_position, vec3(0.0, 0.0, 1.0), 0.0);
-    if (distance < closest_distance) {
-        closest_distance = distance;
-        // set color here, defaulted to closest sphere colour
-    }*/
-
-    return closest_distance;
 }
 
 fn calculate_normal(
@@ -152,27 +130,32 @@ fn calculate_normal(
     let normal: vec3<f32> = vec3(gradient_x, gradient_y, gradient_z);
 
     return normalize(normal);
-}   
+}
 
-fn compute_diffuse(normal: vec3<f32>, light_position: vec3<f32>) -> vec3<f32> {
+/* Lighting related methods */
+fn compute_diffuse(normal: vec3<f32>, light_position: vec3<f32>) -> vec3<f32>
+{
     const material_diffuse_coefficient: vec3<f32> = vec3(0.6, 0.6, 0.7); // TODO: this should be integrated into the material struct
     let n_dot_l: f32 = dot(normal, light_position);
 
     return clamp(n_dot_l * material_diffuse_coefficient, vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(1.0, 1.0, 1.0));
 }
 
-fn compute_specular(light_direction: vec3<f32>, reflection_direction: vec3<f32>) -> vec3<f32> {
+fn compute_specular(light_direction: vec3<f32>, reflection_direction: vec3<f32>) -> vec3<f32>
+{
     const specular_intensity: f32 = 0.5; // TODO add this to material
     const shininess_coefficient: f32 = 4.0; // TODO add this to material, have this be max(mat.shininess, 4.0);
 
     return vec3(specular_intensity * pow(max(dot(reflection_direction, light_direction), 0.0), 4.0));
 }
 
-fn ambient_light() -> vec3<f32> {
+fn ambient_light() -> vec3<f32>
+{
 	return vec3(0.1, 0.1, 0.1);
 }
 
-fn light_attenuation(distance_to_light: f32) -> f32 {
+fn light_attenuation(distance_to_light: f32) -> f32
+{
     return 1.0 / pow(distance_to_light, 2.0);
 }
 
@@ -182,7 +165,8 @@ fn calculate_phong_lighting(
     reflection_direction: vec3<f32>,
     color: ptr<function, vec3<f32>>
 ) {
-    for (var lightIndex: u32 = 0; lightIndex < u32(application_data.light_count); lightIndex++) {
+    for (var lightIndex: u32 = 0; lightIndex < u32(application_data.light_count); lightIndex++)
+    {
         var light_direction: vec3<f32> = light_data.lights[lightIndex].position - position;
         let light_distance: f32 = length(light_direction);
         light_direction /= light_distance;
@@ -208,7 +192,47 @@ fn calculate_phong_lighting(
     *color += ambient_light() * material_ambient_component;
 }
 
-// Signed distance functions
+/* Loop through all primatives and find closest primitive */
+fn closest_distance_in_scene(
+    marched_position: vec3<f32>,  // Position along ray marched so far
+    ray_direction: vec3<f32>, 
+    closest_primative_color: ptr<function, vec3<f32>>
+) -> f32 {
+    var distance: f32;
+    var closest_distance: f32 = 9999.0;
+    for (var i: u32 = 0; i < u32(application_data.sphere_count); i++)
+    {
+        distance = signed_dst_to_sphere(marched_position, ray_direction, i);
+        
+        if (distance < closest_distance)
+        {
+            // Noise to distort the sphere: https://michaelwalczyk.com/blog-ray-marching.html
+            let displacement: f32 = sin(5.0 * marched_position.x) * sin(5.0 * marched_position.y) * sin(5.0 * marched_position.z) * 0.25;
+            closest_distance = distance + displacement;
+            *closest_primative_color = objects.spheres[i].color;
+        }
+    }
+
+    // Torus
+    distance = signed_dst_to_torus(marched_position, vec3(0.0, 0.0, 0.0), vec2(1.0, 0.6));
+    if (distance < closest_distance)
+    {
+        closest_distance = distance;
+        *closest_primative_color = vec3(0.0, 1.0, 0.0);
+    }
+
+    // Plane
+    /*
+    distance = signed_dst_to_plane(marched_position, vec3(0.0, 0.0, 1.0), 0.0);
+    if (distance < closest_distance) {
+        closest_distance = distance;
+        // set color here, defaulted to closest sphere colour
+    }*/
+
+    return closest_distance;
+}
+
+/* Primitive signed distance functions */
 fn signed_dst_to_sphere(
     marched_position: vec3<f32>,
     ray_direction: vec3<f32>,
@@ -217,7 +241,8 @@ fn signed_dst_to_sphere(
     let ray_to_sphere: vec3<f32> = objects.spheres[sphere_index].center - marched_position;
 
     // Ignore spheres behind the current marched position
-    if (dot(ray_to_sphere, ray_direction) < 0) {
+    if (dot(ray_to_sphere, ray_direction) < 0)
+    {
         return 9999.0;
     }
     
@@ -248,7 +273,8 @@ fn signed_dst_to_plane(
 
 // TODO: currently not tested or used
 // Mandelbulb distance estimation: http://blog.hvidtfeldts.net/index.php/2011/09/distance-estimated-3d-fractals-v-the-mandelbulb-different-de-approximations/
-fn signed_dst_mandelbulb(marched_position: vec3<f32>) -> f32 {
+fn signed_dst_mandelbulb(marched_position: vec3<f32>) -> f32
+{
     const power: f32 = 10.0; // This is configurable
 
     var z: vec3<f32> = marched_position;
@@ -256,7 +282,8 @@ fn signed_dst_mandelbulb(marched_position: vec3<f32>) -> f32 {
 	var dr: f32 = 1.0;
     var iterations: i32 = 0;
 
-	for (var i = 0; i < 15 ; i++) {
+	for (var i = 0; i < 15 ; i++)
+    {
         iterations = i;
 		r = length(z);
 
@@ -278,7 +305,70 @@ fn signed_dst_mandelbulb(marched_position: vec3<f32>) -> f32 {
 		z = zr * vec3<f32>(sin(theta) * cos(phi), sin(phi)*sin(theta), cos(theta));
 		z += marched_position;
 	}
+
     var dst: f32 = 0.5 * log(r) * r / dr;
     return dst;
 	//return vec2<f32>(iterations, dst * 1);
+}
+
+// Hash function taken from Inigo Quilez's Rainforest ShaderToy: https://www.shadertoy.com/view/4ttSWf
+fn hash1(n: f32) -> f32
+{
+    return fract(n * 17.0 * fract(n * 0.3183099));
+}
+
+// Generic noise function taken from Inigo Quilez's Rainforest ShaderToy: https://www.shadertoy.com/view/4ttSWf
+fn noise(x: vec3<f32>) -> f32
+{
+    let p: vec3<f32> = floor(x);
+    let w: vec3<f32> = fract(x);
+    
+    let u: vec3<f32> = w*w*w*(w*(w*6.0-15.0)+10.0);
+    
+    let n: f32 = p.x + 317.0*p.y + 157.0*p.z;
+    
+    let a: f32 = hash1(n+0.0);
+    let b: f32 = hash1(n+1.0);
+    let c: f32 = hash1(n+317.0);
+    let d: f32 = hash1(n+318.0);
+    let e: f32 = hash1(n+157.0);
+	let f: f32 = hash1(n+158.0);
+    let g: f32 = hash1(n+474.0);
+    let h: f32 = hash1(n+475.0);
+
+    let k0: f32 =   a;
+    let k1: f32 =   b - a;
+    let k2: f32 =   c - a;
+    let k3: f32 =   e - a;
+    let k4: f32 =   a - b - c + d;
+    let k5: f32 =   a - c - e + g;
+    let k6: f32 =   a - b - e + f;
+    let k7: f32 = - a + b + c - d + e - f - g + h;
+
+    return -1.0 + 2.0 * (k0 + k1*u.x + k2*u.y + k3*u.z + k4*u.x*u.y + k5*u.y*u.z + k6*u.z*u.x + k7*u.x*u.y*u.z);
+}
+
+const m3 = mat3x3<f32> (
+    vec3(0.00,  0.80,  0.60),
+    vec3(-0.80,  0.36, -0.48),
+    vec3(-0.60, -0.48,  0.64)
+);
+
+// Fractional brownian motion taken from Inigo Quilez's Rainforest ShaderToy: https://www.shadertoy.com/view/4ttSWf
+fn fbm_4(x_in: vec3<f32>) -> f32
+{
+    const f: f32 = 2.0;
+    const s: f32 = 0.5;
+    var a: f32 = 0.0;
+    var b: f32 = 0.5;
+    var x: vec3<f32> = x_in;
+    for (var i = 0; i < 4; i++)
+    {
+        let n: f32 = noise(x);
+        a += b*n;
+        b *= s;
+        x = f*m3*x;
+    }
+
+	return a;
 }
