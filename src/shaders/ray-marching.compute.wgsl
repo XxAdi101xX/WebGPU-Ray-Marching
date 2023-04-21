@@ -83,7 +83,7 @@ fn ray_march_opaque_primatives(ray: ptr<function,Ray>) -> vec3<f32> {
         let distance_marched: f32 = closest_distance_in_scene(marched_position, (*ray).direction, &closest_primative_color);
         
         if (distance_marched < epsilon) {
-            const enable_lighting: bool = true;
+            const enable_lighting: bool = true; // Disable to reduce computational cost
             if (enable_lighting) {
                 let reflection_direction: vec3<f32> = reflect((*ray).direction, normal);
                 calculate_phong_lighting(marched_position, normal, reflection_direction, &color);
@@ -154,16 +154,25 @@ fn calculate_normal(
     return normalize(normal);
 }   
 
-fn diffuse(normal: vec3<f32>, light_position: vec3<f32>, material_diffuse_coefficient: vec3<f32>) -> vec3<f32> {
+fn compute_diffuse(normal: vec3<f32>, light_position: vec3<f32>) -> vec3<f32> {
+    const material_diffuse_coefficient: vec3<f32> = vec3(0.6, 0.6, 0.7); // TODO: this should be integrated into the material struct
     let n_dot_l: f32 = dot(normal, light_position);
+
     return clamp(n_dot_l * material_diffuse_coefficient, vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(1.0, 1.0, 1.0));
+}
+
+fn compute_specular(light_direction: vec3<f32>, reflection_direction: vec3<f32>) -> vec3<f32> {
+    const specular_intensity: f32 = 0.5; // TODO add this to material
+    const shininess_coefficient: f32 = 4.0; // TODO add this to material, have this be max(mat.shininess, 4.0);
+
+    return vec3(specular_intensity * pow(max(dot(reflection_direction, light_direction), 0.0), 4.0));
 }
 
 fn ambient_light() -> vec3<f32> {
 	return vec3(0.1, 0.1, 0.1);
 }
 
-fn get_light_attenuation(distance_to_light: f32) -> f32 {
+fn light_attenuation(distance_to_light: f32) -> f32 {
     return 1.0 / pow(distance_to_light, 2.0);
 }
 
@@ -179,9 +188,9 @@ fn calculate_phong_lighting(
         light_direction /= light_distance;
 
         const current_light_color = vec3(1.0, 0.0, 1.0); // TODO: put this as part of lights struct
-        let light_color: vec3<f32> = current_light_color;// * get_light_attenuation(light_distance); // TODO add attenuation
-
+        let light_color: vec3<f32> = current_light_color;// * light_attenuation(light_distance); // TODO add attenuation
         let light_visiblity: f32 = 1.0;
+
         // #if CAST_VOLUME_SHADOW_ON_OPAQUES
         // if(!IsColorInsignificant(lightColor))
         // {
@@ -190,11 +199,8 @@ fn calculate_phong_lighting(
         // }
         // #endif
         
-        const specular_intensity: f32 = 0.5;
-        const shininess_coefficient: f32 = 4.0; // TODO add this to material, have this be max(mat.shininess, 4.0);
-        const material_diffuse_coefficient: vec3<f32> = vec3(0.6, 0.6, 0.7); // TODO: this should be integrated into the material struct
-        let specular_color: vec3<f32> = light_color * light_visiblity * specular_intensity * pow(max(dot(reflection_direction, light_direction), 0.0), 4.0);
-        let diffuse_color: vec3<f32> = light_color * light_visiblity * diffuse(normal, light_direction, material_diffuse_coefficient);
+        let specular_color: vec3<f32> = light_color * light_visiblity * compute_specular(light_direction, reflection_direction);
+        let diffuse_color: vec3<f32> = light_color * light_visiblity * compute_diffuse(normal, light_direction);
         *color += specular_color + diffuse_color;
     }
 
