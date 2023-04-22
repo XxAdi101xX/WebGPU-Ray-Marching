@@ -24,7 +24,7 @@ export class Scene {
         // Setup spheres
         this.sphereData = new Array(1);
         // Hardcode first sphere
-        const center: vec3 = [0.0, 0.0, 3.0];
+        const center: vec3 = [0.0, 3.0, 0.0];
         const radius: number = 1.1;
         const color: vec3 = [0.0, 0.5, 0.8];
         this.sphereData[0] = new Sphere(center, radius, color);

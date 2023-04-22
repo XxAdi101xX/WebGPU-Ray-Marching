@@ -33,9 +33,12 @@ export default class RasterizationRenderer {
 
     scene: Scene;
 
+    applicationStart: DOMHighResTimeStamp;
+
     constructor(canvas: HTMLCanvasElement, scene: Scene) {
         this.scene = scene;
         this.canvas = canvas;
+        this.applicationStart = performance.now();
     }
 
     // 🏎️ Start the rendering engine
@@ -307,9 +310,9 @@ export default class RasterizationRenderer {
             cameraForward: this.scene.camera.forward,
             sphereCount: this.scene.sphereData.length,
             cameraRight: this.scene.camera.right,
-            padding1: 0.0,
+            time: performance.now() - this.applicationStart,
             cameraUp: this.scene.camera.up,
-            padding2: 0.0
+            padding1: 0.0
         }
 
         // Write application data
@@ -328,11 +331,11 @@ export default class RasterizationRenderer {
                     applicationData.cameraRight[0],
                     applicationData.cameraRight[1],
                     applicationData.cameraRight[2],
-                    applicationData.padding1,
+                    applicationData.time,
                     applicationData.cameraUp[0],
                     applicationData.cameraUp[1],
                     applicationData.cameraUp[2],
-                    applicationData.padding2
+                    applicationData.padding1
                 ]
             ), 0, 16
         )
@@ -400,7 +403,7 @@ export default class RasterizationRenderer {
     }
 
     render = (): void => {
-        const start: number = performance.now();
+        const frameRenderStart: number = performance.now();
 
         // ⏭ Acquire next image from context
         this.colorTexture = this.context.getCurrentTexture();
@@ -411,10 +414,10 @@ export default class RasterizationRenderer {
 
         this.device.queue.onSubmittedWorkDone().then(
             () => {
-                const end: number = performance.now();
+                const frameRenderEnd: number = performance.now();
                 const performanceLabel: HTMLElement =  <HTMLElement> document.getElementById("render-time");
                 if (performanceLabel) {
-                    performanceLabel.innerText = (end - start).toFixed(2);
+                    performanceLabel.innerText = (frameRenderEnd - frameRenderStart).toFixed(2);
                 }
             }
         );
