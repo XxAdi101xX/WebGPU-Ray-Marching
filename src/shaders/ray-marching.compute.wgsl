@@ -248,6 +248,7 @@ fn closest_distance_in_scene(
 }
 
 /* Primitive signed distance functions */
+// Note that spheres are defined on the CPU
 fn signed_dst_to_sphere(
     marched_position: vec3<f32>,
     ray_direction: vec3<f32>,
@@ -264,7 +265,7 @@ fn signed_dst_to_sphere(
     return length(ray_to_sphere) - objects.spheres[sphere_index].radius;
 }
 
-// TODO: add torus data on the CPU side
+// Note that torus is only defined on the GPU side
 fn signed_dst_to_torus(
     marched_position: vec3<f32>,
     center: vec3<f32>,
@@ -277,18 +278,16 @@ fn signed_dst_to_torus(
     return length(q) - radii.y;
 }
 
-// TODO: add plane data on the CPU side
+// Note that plane is only defined on the GPU side
 fn signed_dst_to_plane(
     marched_position: vec3<f32>,
     normal: vec3<f32>,
     h: f32
 ) -> f32 {
-    return dot(marched_position, normal) + h;
-    // Complete answer below but we will assume it's axis aligned hence use answer above
-    // let signed_dst = 
-    //     (marched_position.x * normal.x + marched_position.y * normal.y + marched_position.z * normal.z + h) 
-    //     / sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.x);
-    // return signed_dst;
+    let signed_dst =
+        (marched_position.x * normal.x + marched_position.y * normal.y + marched_position.z * normal.z + h) 
+        / sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.x);
+    return signed_dst;
 }
 
 // TODO: currently not tested or used
@@ -383,7 +382,7 @@ fn sdSphere(
 // TODO remove this, redudant
 fn sdPlane(p: vec3<f32>) -> f32
 {
-	return p.y;
+    return p.y;
 }
 
 // Hash function taken from Inigo Quilez's Rainforest ShaderToy: https://www.shadertoy.com/view/4ttSWf
