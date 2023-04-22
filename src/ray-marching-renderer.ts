@@ -33,12 +33,12 @@ export default class RasterizationRenderer {
 
     scene: Scene;
 
-    applicationStart: DOMHighResTimeStamp;
+    timer: DOMHighResTimeStamp;
 
     constructor(canvas: HTMLCanvasElement, scene: Scene) {
         this.scene = scene;
         this.canvas = canvas;
-        this.applicationStart = performance.now();
+        this.timer = 0.0;
     }
 
     // 🏎️ Start the rendering engine
@@ -310,10 +310,11 @@ export default class RasterizationRenderer {
             cameraForward: this.scene.camera.forward,
             sphereCount: this.scene.sphereData.length,
             cameraRight: this.scene.camera.right,
-            time: performance.now() - this.applicationStart,
+            time: this.timer,
             cameraUp: this.scene.camera.up,
             padding1: 0.0
         }
+        this.timer += 0.25;
 
         // Write application data
         this.device.queue.writeBuffer(

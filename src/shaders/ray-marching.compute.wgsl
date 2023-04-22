@@ -108,7 +108,7 @@ fn ray_march(ray: ptr<function,Ray>) -> vec3<f32>
 
     // Calculate opaque primitive lighting
     if (primitive_hit) {
-        const enable_lighting: bool = false; // Disable to reduce computational cost
+        const enable_lighting: bool = true; // Disable to reduce computational cost
         if (enable_lighting)
         {
             var unused: vec3<f32>; // We don't care about colour when we want the normal
@@ -160,7 +160,7 @@ fn compute_specular(light_direction: vec3<f32>, reflection_direction: vec3<f32>)
 
 fn ambient_light() -> vec3<f32>
 {
-	return vec3(0.03, 0.03, 0.03);
+	return vec3(0.1, 0.1, 0.1);
 }
 
 fn light_attenuation(distance_to_light: f32) -> f32
@@ -209,33 +209,35 @@ fn closest_distance_in_scene(
 ) -> f32 {
     var distance: f32;
     var closest_distance: f32 = 9999.0;
-    for (var i: u32 = 0; i < u32(application_data.sphere_count); i++)
-    {
-        distance = signed_dst_to_sphere(marched_position, ray_direction, i);
+
+    // Spheres from CPU side
+    // for (var i: u32 = 0; i < u32(application_data.sphere_count); i++)
+    // {
+    //     distance = signed_dst_to_sphere(marched_position, ray_direction, i);
         
-        if (distance < closest_distance)
-        {
-            // Noise to distort the sphere: https://michaelwalczyk.com/blog-ray-marching.html
-            let displacement: f32 = sin(5.0 * marched_position.x) * sin(5.0 * marched_position.y) * sin(5.0 * marched_position.z) * 0.25;
-            closest_distance = distance + displacement;
-            *closest_primitive_color = objects.spheres[i].color;
-        }
-    }
+    //     if (distance < closest_distance)
+    //     {
+    //         // Noise to distort the sphere: https://michaelwalczyk.com/blog-ray-marching.html
+    //         let displacement: f32 = sin(5.0 * marched_position.x) * sin(5.0 * marched_position.y) * sin(5.0 * marched_position.z) * 0.25;
+    //         closest_distance = distance + displacement;
+    //         *closest_primitive_color = objects.spheres[i].color;
+    //     }
+    // }
 
     // Torus
-    distance = signed_dst_to_torus(marched_position, vec3(0.0, 0.0, 0.0), vec2(1.0, 0.6));
-    if (distance < closest_distance)
-    {
-        closest_distance = distance;
-        *closest_primitive_color = vec3(0.0, 1.0, 0.0);
-    }
-
-    // distance = signed_distance_volumetric_glob(marched_position);
+    // distance = signed_dst_to_torus(marched_position, vec3(0.0, 0.0, 0.0), vec2(1.0, 0.6));
     // if (distance < closest_distance)
     // {
     //     closest_distance = distance;
     //     *closest_primitive_color = vec3(0.0, 1.0, 0.0);
     // }
+
+    distance = signed_distance_volumetric_glob(marched_position);
+    if (distance < closest_distance)
+    {
+        closest_distance = distance;
+        *closest_primitive_color = vec3(0.8);
+    }
 
     // Plane
     // distance = signed_dst_to_plane(marched_position, vec3(0.0, 0.0, 1.0), 0.0);
@@ -263,6 +265,17 @@ fn signed_dst_to_sphere(
     }
     
     return length(ray_to_sphere) - objects.spheres[sphere_index].radius;
+}
+
+// This sdf is mainly used for GPU defined spheres to allow for quick GPU side iteration
+fn signed_dst_to_custom_sphere(
+    marched_position: vec3<f32>,
+    center: vec3<f32>,
+    radius: f32
+) -> f32 {
+    let ray_to_sphere: vec3<f32> = center - marched_position;
+    
+    return length(ray_to_sphere) - radius;
 }
 
 // Note that torus is only defined on the GPU side
@@ -341,10 +354,10 @@ fn signed_distance_smooth_union(d1: f32, d2: f32 , k: f32) -> f32
 fn signed_distance_volumetric_glob(marched_position: vec3<f32>) -> f32
 {
     let fbm_coord: vec3<f32> = (marched_position + 2.0 * vec3(application_data.time, 0.0, application_data.time)) / 1.5f;
-    var signed_distance: f32 = sdSphere(marched_position, vec3(-8.0, 2.0 + 20.0 * sin(application_data.time), -1), 5.6);
-    signed_distance = signed_distance_smooth_union(signed_distance, sdSphere(marched_position, vec3(8.0, 8.0 + 12.0 * cos(application_data.time), 3), 5.6), 3.0f);
-    signed_distance = signed_distance_smooth_union(signed_distance, sdSphere(marched_position, vec3(5.0 * sin(application_data.time), 3.0, 0), 8.0), 3.0) + 7.0 * fbm_4(fbm_coord / 3.2);
-    signed_distance = signed_distance_smooth_union(signed_distance, sdPlane(marched_position + vec3(0, 0.4, 0)), 22.0);
+    var signed_distance: f32 = signed_dst_to_custom_sphere(marched_position, vec3(-8.0, 2.0 + 20.0 * sin(application_data.time), -1), 5.6);
+    signed_distance = signed_distance_smooth_union(signed_distance, signed_dst_to_custom_sphere(marched_position, vec3(8.0, 8.0 + 12.0 * cos(application_data.time), 3), 5.6), 3.0f);
+    signed_distance = signed_distance_smooth_union(signed_distance, signed_dst_to_custom_sphere(marched_position, vec3(5.0 * sin(application_data.time), 3.0, 0), 8.0), 3.0) + 7.0 * fbm_4(fbm_coord / 3.2);
+    //signed_distance = signed_distance_smooth_union(signed_distance, sdPlane(marched_position), 22.0);
     return signed_distance;
 }
 
@@ -369,20 +382,9 @@ fn intersect_volume(ray_origin: vec3<f32>, ray_direction: vec3<f32>, max_t: f32)
 }
 
 // TODO remove this, redudant
-fn sdSphere(
-    marched_position: vec3<f32>,
-    center: vec3<f32>,
-    radius: f32
-) -> f32 {
-    let ray_to_sphere: vec3<f32> = center - marched_position;
-    
-    return length(ray_to_sphere) - radius;
-}
-
-// TODO remove this, redudant
 fn sdPlane(p: vec3<f32>) -> f32
 {
-    return p.y;
+    return p.z;
 }
 
 // Hash function taken from Inigo Quilez's Rainforest ShaderToy: https://www.shadertoy.com/view/4ttSWf
