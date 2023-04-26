@@ -7,4 +7,9 @@ canvas.width = canvas.height = 800;
 const scene: Scene = new Scene();
 const renderer: RayMarchingRenderer = new RayMarchingRenderer(canvas, scene);
 
-renderer.start();
+try {
+    renderer.start();
+} catch(e) {
+    console.log(e);
+    throw e;
+}

@@ -48,7 +48,7 @@ export class Scene {
         }
         
         // Setup camera
-        this.camera = new Camera([-10.0, 0.0, 0.0], 0.0, 0.0);
+        this.camera = new Camera([-45.0, 0.0, 0.0], 0.0, 0.0);
 
         // Setup lights
         this.lights = new Array(1);

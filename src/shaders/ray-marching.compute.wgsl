@@ -57,9 +57,17 @@ struct Ray
 }
 
 /* General ray marching constants */
-const epsilon: f32 = 0.001;
-const max_distance: f32 = 9999.0;
-const max_ray_marching_steps: u32 = 32;
+const EPSILON: f32 = 0.001;
+const MAX_DISTANCE: f32 = 9999.0;
+const MAX_RAY_MARCHING_STEPS: u32 = 32;
+
+const ABSORPTION_COEFFICIENT: f32 = 0.5; // TODO should be part of material
+const ABSORPTION_CUTOFF: f32 = 0.25; // 0.01;
+const MARCH_MULTIPLIER: f32 = 1.8; // 1.0;
+const MAX_VOLUME_MARCH_STEPS: u32 = 20;
+const MAX_VOLUME_LIGHT_MARCH_STEPS: u32 = 4; // 25;
+const MAX_OPAQUE_SHADOW_MARCH_STEPS: u32 = 10; // 25;
+const UNIFORM_FOG_DENSITY: bool = false;
 
 @compute @workgroup_size(64,1,1)
 fn main(@builtin(global_invocation_id) GlobalInvocationID : vec3<u32>)
@@ -84,26 +92,80 @@ fn ray_march(ray: ptr<function,Ray>) -> vec3<f32>
     var opaque_primitive_color: vec3<f32> = vec3(0.0);
     var total_distance_marched: f32 = 0.0;
     var closest_primitive_color: vec3<f32> = vec3(0.0); // Defaulted to black for background
-    var marched_position: vec3<f32> = vec3(0.0);
+    var opaque_volume_marched_position: vec3<f32> = vec3(0.0);
 
     // Ray march opaque volume
-    for (var step: u32 = 0; step < max_ray_marching_steps; step++)
+    for (var step: u32 = 0; step < MAX_RAY_MARCHING_STEPS; step++)
     {
-        marched_position = (*ray).origin + (*ray).direction * total_distance_marched;
+        opaque_volume_marched_position = (*ray).origin + (*ray).direction * total_distance_marched;
 
-        var distance_marched: f32 = closest_distance_in_scene(marched_position, (*ray).direction, &closest_primitive_color);
+        var distance_marched: f32 = closest_distance_in_scene(opaque_volume_marched_position, (*ray).direction, &closest_primitive_color);
         
-        if (distance_marched < epsilon)
+        if (distance_marched < EPSILON)
         {
             primitive_hit = true;
             break; 
         }
 
-        if (total_distance_marched > max_distance)
+        if (total_distance_marched > MAX_DISTANCE)
         {
             break;
         }
         total_distance_marched += distance_marched;
+    }
+
+    // Ray march non-opaque volume; core concepts from https://wallisc.github.io/rendering/2020/05/02/Volumetric-Rendering-Part-1.html
+    var volume_depth: f32 = intersect_volume((*ray).origin, (*ray).direction, total_distance_marched);
+    var opaque_visibility: f32 = 1.0;
+    var volumetric_color: vec3<f32> = vec3(0.0);
+    if (volume_depth > 0.0)
+    {
+        const volume_albedo: vec3<f32> = vec3(0.8);
+        const march_size: f32 = 0.6f * MARCH_MULTIPLIER;
+        var distance_in_volume: f32 = 0.0;
+        var signed_distance: f32 = 0.0;
+        for (var i: u32 = 0; i < MAX_VOLUME_MARCH_STEPS; i++)
+        {
+            volume_depth += max(march_size, signed_distance);
+            if (volume_depth > total_distance_marched || opaque_visibility < ABSORPTION_CUTOFF)
+            {
+                break;
+            }
+            
+            let position: vec3<f32> = (*ray).origin + volume_depth * (*ray).direction;
+
+            signed_distance = signed_distance_volumetric_glob(position);
+
+            // We are within the volume if the signed_distance is less than 0
+			if (signed_distance < 0.0)
+            {
+                distance_in_volume += march_size;
+                let previous_opaque_visibility: f32 = opaque_visibility;
+                opaque_visibility *= beer_lambert(ABSORPTION_COEFFICIENT * fog_density(position, signed_distance), march_size);
+                let absorptionFromMarch: f32 = previous_opaque_visibility - opaque_visibility;
+                
+                // For simplicity, we will simulate single scattering of light rays as we march along the ray and use that intersection point as the light intersection
+                for (var lightIndex: u32 = 0; lightIndex < u32(application_data.light_count); lightIndex++)
+    			{
+                    var light_direction: vec3<f32> = light_data.lights[lightIndex].position - position;
+                    let light_distance: f32 = length(light_direction);
+                    light_direction /= light_distance;
+
+                    const current_light_color: vec3<f32> = vec3(1.0, 0.0, 0.0); // TODO: put this as part of lights struct
+                    let light_color: vec3<f32> = current_light_color;// * light_attenuation(light_distance); // TODO add attenuation
+                    let light_visiblity: f32 = 1.0;
+
+                    if (is_color_insignificant(light_color)) {
+                        continue;
+                    }
+                    
+                    const light_march_size: f32 = 0.65f * MARCH_MULTIPLIER;
+                    let light_visibility: f32 = calculate_light_visibility(position, (*ray).direction, light_distance, MAX_VOLUME_LIGHT_MARCH_STEPS, light_march_size); 
+                    volumetric_color += absorptionFromMarch * light_visibility * volume_albedo * light_color;
+                }
+                volumetric_color += absorptionFromMarch * volume_albedo * ambient_light();
+            }
+        }
     }
 
     // Calculate opaque primitive lighting
@@ -112,9 +174,9 @@ fn ray_march(ray: ptr<function,Ray>) -> vec3<f32>
         if (enable_lighting)
         {
             var unused: vec3<f32>; // We don't care about colour when we want the normal
-            let normal = calculate_normal(marched_position, (*ray).direction, &unused);
+            let normal = calculate_normal(opaque_volume_marched_position, (*ray).direction, &unused);
             let reflection_direction: vec3<f32> = reflect((*ray).direction, normal);
-            calculate_phong_lighting(marched_position, normal, reflection_direction, closest_primitive_color, &opaque_primitive_color);
+            calculate_phong_lighting(opaque_volume_marched_position, normal, reflection_direction, closest_primitive_color, &opaque_primitive_color);
         }
         else
         {
@@ -122,7 +184,62 @@ fn ray_march(ray: ptr<function,Ray>) -> vec3<f32>
         }
     }
 
-    return opaque_primitive_color;
+    volumetric_color = clamp(volumetric_color, vec3(0.0), vec3(1.0));
+    return min(volumetric_color, vec3(1.0)) + opaque_visibility * opaque_primitive_color;
+}
+
+// Lowering dentisty based on how lose we are to an edge for softer effects near edge
+fn fog_density(position: vec3<f32>, sdf_distance: f32) -> f32
+{
+    const max_sdf_multiplier: f32 = 1.0;
+    let inside_sdf: bool = sdf_distance < 0.0;
+    let sdf_multiplier: f32 = select(0.0, min(abs(sdf_distance), max_sdf_multiplier), inside_sdf); // false, true, condition
+
+    if (UNIFORM_FOG_DENSITY) {
+        return sdf_multiplier;
+    }
+    return sdf_multiplier * abs(fbm_4(position / 6.0) + 0.5);
+}
+
+// Used to calculate the absorption of light along a path based on the material absorption coefficient and the distance travelled
+fn beer_lambert(absorption: f32, distance_travelled: f32) -> f32
+{
+    return exp(-absorption * distance_travelled);
+}
+
+fn calculate_light_visibility(ray_origin: vec3<f32>, ray_direction: vec3<f32>, maxT: f32, max_steps: u32, march_size: f32) -> f32
+{
+    var t: f32 = 0.0;
+    var visibility: f32 = 1.0;
+    var signed_distance: f32 = 0.0;
+    for (var i: u32 = 0; i < max_steps; i++)
+    {                       
+        t += max(march_size, signed_distance);
+        if (t > maxT || visibility < ABSORPTION_CUTOFF){
+            break;
+        }
+
+        let marched_position: vec3<f32> = ray_origin + t * ray_direction;
+
+        signed_distance = signed_distance_volumetric_glob(marched_position);
+        if (signed_distance < 0.0)
+        {
+            visibility *= beer_lambert(ABSORPTION_COEFFICIENT * fog_density(marched_position, signed_distance), march_size);
+        }
+    }
+    return visibility;
+}
+
+
+fn luminance(color: vec3<f32>) -> f32
+{
+    return (color.r * 0.3) + (color.g * 0.59) + (color.b * 0.11);
+}
+
+fn is_color_insignificant(color: vec3<f32>) -> bool
+{
+    const minValue: f32 = 0.009;
+    return luminance(color) < minValue;
 }
 
 fn calculate_normal(
@@ -130,7 +247,7 @@ fn calculate_normal(
     ray_direction: vec3<f32>, 
     closest_primitive_color: ptr<function, vec3<f32>>
 ) -> vec3<f32> {
-    const small_step: vec3<f32> = vec3(epsilon, 0.0, 0.0);
+    const small_step: vec3<f32> = vec3(EPSILON, 0.0, 0.0);
 
     let gradient_x: f32 = closest_distance_in_scene(marched_position + small_step.xyy, ray_direction, closest_primitive_color) - closest_distance_in_scene(marched_position - small_step.xyy, ray_direction, closest_primitive_color);
     let gradient_y: f32 = closest_distance_in_scene(marched_position + small_step.yxy, ray_direction, closest_primitive_color) - closest_distance_in_scene(marched_position - small_step.yxy, ray_direction, closest_primitive_color);
@@ -147,7 +264,7 @@ fn compute_diffuse(normal: vec3<f32>, light_position: vec3<f32>, input_color: ve
     let material_diffuse: vec3<f32> = input_color; // TODO: this should be integrated into the material struct
     let n_dot_l: f32 = dot(normal, light_position);
 
-    return clamp(n_dot_l * material_diffuse, vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(1.0, 1.0, 1.0));
+    return clamp(n_dot_l * material_diffuse, vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
 fn compute_specular(light_direction: vec3<f32>, reflection_direction: vec3<f32>) -> vec3<f32>
@@ -183,18 +300,17 @@ fn calculate_phong_lighting(
 
         const current_light_color = vec3(1.0, 0.0, 0.0); // TODO: put this as part of lights struct
         let light_color: vec3<f32> = current_light_color;// * light_attenuation(light_distance); // TODO add attenuation
-        let light_visiblity: f32 = 1.0;
+        var light_visibility: f32 = 1.0;
 
-        // #if CAST_VOLUME_SHADOW_ON_OPAQUES
-        // if(!IsColorInsignificant(lightColor))
+        // TODO test and enable this check
+        // if (!is_color_insignificant(light_color))
         // {
-        //     const float shadowMarchSize = 0.65f * MARCH_MULTIPLIER;
-        //     lightVisiblity = GetLightVisiblity(position, lightDirection, lightDistance, MAX_OPAQUE_SHADOW_MARCH_STEPS, shadowMarchSize); 
+        //     const shadow_march_size: f32 = 0.65f * MARCH_MULTIPLIER;
+        //     light_visibility = calculate_light_visibility(position, light_direction, light_distance, MAX_OPAQUE_SHADOW_MARCH_STEPS, shadow_march_size); 
         // }
-        // #endif
         
-        let specular_color: vec3<f32> = light_color * light_visiblity * compute_specular(light_direction, reflection_direction);
-        let diffuse_color: vec3<f32> = light_color * light_visiblity * compute_diffuse(normal, light_direction, input_color);
+        let specular_color: vec3<f32> = light_color * light_visibility * compute_specular(light_direction, reflection_direction);
+        let diffuse_color: vec3<f32> = light_color * light_visibility * compute_diffuse(normal, light_direction, input_color);
         *output_color += specular_color + diffuse_color;
     }
 
@@ -225,19 +341,19 @@ fn closest_distance_in_scene(
     // }
 
     // Torus
-    // distance = signed_dst_to_torus(marched_position, vec3(0.0, 0.0, 0.0), vec2(1.0, 0.6));
-    // if (distance < closest_distance)
-    // {
-    //     closest_distance = distance;
-    //     *closest_primitive_color = vec3(0.0, 1.0, 0.0);
-    // }
-
-    distance = signed_distance_volumetric_glob(marched_position);
+    distance = signed_dst_to_torus(marched_position, vec3(0.0, 0.0, 0.0), vec2(1.0, 0.6));
     if (distance < closest_distance)
     {
         closest_distance = distance;
-        *closest_primitive_color = vec3(0.8);
+        *closest_primitive_color = vec3(0.0, 1.0, 0.0);
     }
+
+    // distance = signed_distance_volumetric_glob(marched_position);
+    // if (distance < closest_distance)
+    // {
+    //     closest_distance = distance;
+    //     *closest_primitive_color = vec3(0.8);
+    // }
 
     // Plane
     // distance = signed_dst_to_plane(marched_position, vec3(0.0, 0.0, 1.0), 0.0);
@@ -355,17 +471,16 @@ fn signed_distance_volumetric_glob(marched_position: vec3<f32>) -> f32
 {
     let fbm_coord: vec3<f32> = (marched_position + 2.0 * vec3(application_data.time, 0.0, application_data.time)) / 1.5f;
     var signed_distance: f32 = signed_dst_to_custom_sphere(marched_position, vec3(-8.0, 2.0 + 20.0 * sin(application_data.time), -1), 5.6);
-    signed_distance = signed_distance_smooth_union(signed_distance, signed_dst_to_custom_sphere(marched_position, vec3(8.0, 8.0 + 12.0 * cos(application_data.time), 3), 5.6), 3.0f);
+    signed_distance = signed_distance_smooth_union(signed_distance, signed_dst_to_custom_sphere(marched_position, vec3(8.0, 8.0 + 12.0 * cos(application_data.time), 3), 5.6), 3.0);
     signed_distance = signed_distance_smooth_union(signed_distance, signed_dst_to_custom_sphere(marched_position, vec3(5.0 * sin(application_data.time), 3.0, 0), 8.0), 3.0) + 7.0 * fbm_4(fbm_coord / 3.2);
-    //signed_distance = signed_distance_smooth_union(signed_distance, sdPlane(marched_position), 22.0);
     return signed_distance;
 }
 
 fn intersect_volume(ray_origin: vec3<f32>, ray_direction: vec3<f32>, max_t: f32) -> f32
 {
 	const precis: f32 = 0.5; 
-    var t: f32 = 0.0f;
-    for (var i: u32 = 0; i < max_ray_marching_steps; i++)
+    var t: f32 = 0.0;
+    for (var i: u32 = 0; i < MAX_RAY_MARCHING_STEPS; i++)
     {
 	    let result: f32 = signed_distance_volumetric_glob(ray_origin + ray_direction * t);
         if (result < precis || t > max_t)
@@ -379,12 +494,6 @@ fn intersect_volume(ray_origin: vec3<f32>, ray_direction: vec3<f32>, max_t: f32)
         return -1.0;
     }
     return t;
-}
-
-// TODO remove this, redudant
-fn sdPlane(p: vec3<f32>) -> f32
-{
-    return p.z;
 }
 
 // Hash function taken from Inigo Quilez's Rainforest ShaderToy: https://www.shadertoy.com/view/4ttSWf
