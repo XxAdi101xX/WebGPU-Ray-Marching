@@ -3,7 +3,7 @@ A rendering engine created using WebGPU that implements the sphere tracing algor
 
 A simple camera has been implemented to allow for using WASD to move along the x and y directions and using EQ to move along the z direction. You can orbit the camera by clicking and dragging the mouse on the canvas.
 
-![transparent_ray_marched_volume](https://user-images.githubusercontent.com/18451835/234722686-28113a46-bea4-4100-bdba-39fe1f3cee0f.gif)
+![transparent_ray_marched_volume](https://user-images.githubusercontent.com/18451835/235277701-5bd92a82-ec77-4712-b473-c0c82f09dcc5.gif)
 
 ![webgpu-raymarcher](https://user-images.githubusercontent.com/18451835/230788463-42ecb45b-5a65-4384-bc16-a7c83a6506b1.png)
 
